@@ -1,29 +1,23 @@
 import { Suspense } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate, useRoutes } from "react-router-dom";
 import Home from "./components/home";
-import PricingPage from "./components/landing/PricingPage";
 import LandingPage from "./components/landing/LandingPage";
-import OnboardingPage from "./components/onboarding/OnboardingPage";
-import SignInPage from "./components/auth/SignInPage";
 import CodeAnalysisPage from "./components/analysis/CodeAnalysisPage";
 import CodeTreePage from "./components/dashboard/pages/CodeTreePage";
 import ComplexityPage from "./components/dashboard/pages/ComplexityPage";
 import DependencyPage from "./components/dashboard/pages/DependencyPage";
 import PerformancePage from "./components/dashboard/pages/PerformancePage";
-import { DashboardProvider } from "@/lib/dashboardContext";
-import { useAuth } from "@/lib/auth";
+import SignInPage from "./components/auth/SignInPage";
+import SignUpPage from "./components/auth/SignUpPage";
+import AuthCallback from "./components/auth/AuthCallback";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import { DashboardProvider } from "@/lib/dashboardContext";
+import { LoadingSpinner } from "./components/ui/loading-spinner";
+import { useAuth } from "./lib/auth";
+import routes from "tempo-routes";
 
 function App() {
-  const { loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Loading...</p>
-      </div>
-    );
-  }
+  const { session } = useAuth();
 
   return (
     <DashboardProvider>
@@ -31,15 +25,31 @@ function App() {
         <Suspense
           fallback={
             <div className="flex items-center justify-center min-h-screen">
-              <p>Loading...</p>
+              <LoadingSpinner />
             </div>
           }
         >
+          {/* Tempo routes */}
+          {import.meta.env.VITE_TEMPO && useRoutes(routes)}
+
           <Routes>
+            {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
-            <Route path="/signin" element={<SignInPage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route
+              path="/signin"
+              element={
+                session ? <Navigate to="/dashboard" replace /> : <SignInPage />
+              }
+            />
+            <Route
+              path="/signup"
+              element={
+                session ? <Navigate to="/dashboard" replace /> : <SignUpPage />
+              }
+            />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+
+            {/* Protected Routes */}
             <Route
               path="/dashboard"
               element={
@@ -88,6 +98,12 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Add this before the catchall route */}
+            {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}
+
+            {/* Catch all redirect to landing page */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </div>

@@ -28,4 +28,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    historyApiFallback: true,
+    middleware: (app) => {
+      app.use((req, res, next) => {
+        if (req.url.startsWith("/preview")) {
+          req.url = "/";
+        }
+        next();
+      });
+    },
+  },
 });

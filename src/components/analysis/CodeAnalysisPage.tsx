@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import Sidebar from "../dashboard/Sidebar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileCode, Upload, History, Loader2, Settings } from "lucide-react";
 import { analyzeCode } from "@/lib/codeAnalysis";
-import { saveAnalysisResults } from "@/lib/projectService";
-import { useAuth } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
+import { saveAnalysisResults, getCurrentProject } from "@/lib/projectService";
 import AnalysisResults from "./AnalysisResults";
 import { motion, AnimatePresence } from "framer-motion";
-import gsap from "gsap";
+import { useDashboard } from "@/lib/dashboardContext";
 
 interface AnalysisOptions {
   complexity: boolean;
@@ -24,10 +23,9 @@ interface AnalysisOptions {
 }
 
 const CodeAnalysisPage = () => {
-  const { user } = useAuth();
+  const { setAnalysisResults, analysisResults } = useDashboard();
   const [code, setCode] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResults, setAnalysisResults] = useState(null);
   const [options, setOptions] = useState<AnalysisOptions>({
     complexity: true,
     security: true,
@@ -35,60 +33,7 @@ const CodeAnalysisPage = () => {
     documentation: true,
   });
 
-  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  useEffect(() => {
-    // Reset analysis results when code changes
-    setAnalysisResults(null);
-  }, [code]);
-
-  useEffect(() => {
-    // Add magnetic effect to buttons
-    buttonRefs.current.forEach((button) => {
-      if (!button) return;
-
-      const handleMouseMove = (e: MouseEvent) => {
-        const rect = button.getBoundingClientRect();
-        const x = e.clientX - rect.left - rect.width / 2;
-        const y = e.clientY - rect.top - rect.height / 2;
-
-        gsap.to(button, {
-          x: x * 0.1,
-          y: y * 0.1,
-          duration: 0.2,
-          ease: "power2.out",
-        });
-      };
-
-      const handleMouseLeave = () => {
-        gsap.to(button, {
-          x: 0,
-          y: 0,
-          duration: 0.2,
-          ease: "power2.out",
-        });
-      };
-
-      button.addEventListener("mousemove", handleMouseMove);
-      button.addEventListener("mouseleave", handleMouseLeave);
-
-      return () => {
-        button.removeEventListener("mousemove", handleMouseMove);
-        button.removeEventListener("mouseleave", handleMouseLeave);
-      };
-    });
-  }, []);
-
   const handleAnalyze = async () => {
-    if (!user?.id) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to analyze code",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!code.trim()) {
       toast({
         title: "Error",
@@ -100,15 +45,18 @@ const CodeAnalysisPage = () => {
 
     setIsAnalyzing(true);
     try {
-      const results = await analyzeCode(code, options);
-      setAnalysisResults(results);
+      // Get current project
+      const project = await getCurrentProject();
+      if (!project) throw new Error("No project found");
 
-      await saveAnalysisResults(user.id, {
-        complexity_metrics: results.complexity,
-        security_issues: results.security,
-        style_issues: results.style,
-        documentation_issues: results.documentation,
-      });
+      // Analyze code
+      const results = await analyzeCode(code, options);
+
+      // Save results
+      await saveAnalysisResults(project.id, results);
+
+      // Update UI
+      setAnalysisResults(results);
 
       toast({
         title: "Analysis Complete",
@@ -153,7 +101,7 @@ const CodeAnalysisPage = () => {
         >
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h1 className="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500">
+              <h1 className="text-4xl font-bold tracking-tight">
                 Code Analysis
               </h1>
               <p className="text-muted-foreground text-lg">
@@ -239,7 +187,6 @@ const CodeAnalysisPage = () => {
                   <Button
                     onClick={handleAnalyze}
                     disabled={!code.trim() || isAnalyzing}
-                    ref={(el) => (buttonRefs.current[0] = el)}
                     className="w-full h-12 text-lg bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 hover:from-blue-600 hover:via-purple-600 hover:to-cyan-600 transition-all duration-300 rounded-xl shadow-lg hover:shadow-xl hover:scale-[1.02]"
                   >
                     {isAnalyzing ? (
@@ -273,7 +220,6 @@ const CodeAnalysisPage = () => {
                       <Button
                         onClick={handleAnalyze}
                         disabled={!code.trim() || isAnalyzing}
-                        ref={(el) => (buttonRefs.current[1] = el)}
                         className="bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 hover:from-blue-600 hover:via-purple-600 hover:to-cyan-600 rounded-xl px-6 hover:scale-[1.02] transition-all duration-300"
                       >
                         {isAnalyzing ? (
@@ -299,7 +245,6 @@ const CodeAnalysisPage = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      ref={(el) => (buttonRefs.current[2] = el)}
                       className="rounded-xl hover:scale-[1.02] transition-all duration-300"
                     >
                       <Settings className="h-4 w-4" />

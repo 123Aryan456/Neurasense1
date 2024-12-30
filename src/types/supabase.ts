@@ -112,6 +112,39 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          started_at: string
+          status: string
+          tier: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          started_at?: string
+          status: string
+          tier: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          tier?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           created_at: string | null
@@ -120,6 +153,7 @@ export type Database = {
           last_login: string | null
           name: string
           preferences: Json | null
+          subscription_tier: string | null
         }
         Insert: {
           created_at?: string | null
@@ -128,6 +162,7 @@ export type Database = {
           last_login?: string | null
           name: string
           preferences?: Json | null
+          subscription_tier?: string | null
         }
         Update: {
           created_at?: string | null
@@ -136,6 +171,7 @@ export type Database = {
           last_login?: string | null
           name?: string
           preferences?: Json | null
+          subscription_tier?: string | null
         }
         Relationships: []
       }

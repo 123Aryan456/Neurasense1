@@ -1,137 +1,124 @@
 import { supabase } from "./supabase";
-import type { TreeNode } from "@/components/dashboard/widgets/CodeTreeWidget";
 import type { Database } from "@/types/supabase";
 
-export type ProjectMetrics =
-  Database["public"]["Tables"]["project_metrics"]["Row"];
+export type Project = Database["public"]["Tables"]["projects"]["Row"];
 export type AnalysisResult =
   Database["public"]["Tables"]["analysis_results"]["Row"];
 
-export const createDefaultProject = async (userId: string) => {
-  const { data: existingProject } = await supabase
-    .from("projects")
-    .select()
-    .eq("user_id", userId)
-    .single();
+export const createProject = async (data: {
+  name: string;
+  type: string;
+  settings?: any;
+}) => {
+  try {
+    const { data: project, error } = await supabase
+      .from("projects")
+      .insert({
+        name: data.name,
+        type: data.type,
+        settings: data.settings || {},
+        user_id: (await supabase.auth.getUser()).data.user?.id,
+      })
+      .select()
+      .single();
 
-  if (existingProject) return existingProject;
-
-  const { data: project, error } = await supabase
-    .from("projects")
-    .insert({
-      user_id: userId,
-      name: "Default Project",
-      type: "python",
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return project;
+    if (error) throw error;
+    return project;
+  } catch (error: any) {
+    console.error("Error creating project:", error);
+    throw error;
+  }
 };
 
-export const getProjectMetrics = async (projectId: string) => {
-  const { data, error } = await supabase
-    .from("project_metrics")
-    .select("*")
-    .eq("project_id", projectId)
-    .single();
+export const getCurrentProject = async () => {
+  try {
+    const { data: project, error } = await supabase
+      .from("projects")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
-  if (error && error.code !== "PGRST116") throw error;
-  return data;
+    if (error && error.code !== "PGRST116") throw error;
+    return project;
+  } catch (error: any) {
+    console.error("Error getting current project:", error);
+    throw error;
+  }
 };
 
-export const getAnalysisResults = async (projectId: string) => {
-  const { data, error } = await supabase
-    .from("analysis_results")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+export const saveAnalysisResults = async (projectId: string, results: any) => {
+  try {
+    // Save analysis results
+    const { error: analysisError } = await supabase
+      .from("analysis_results")
+      .insert({
+        project_id: projectId,
+        complexity_metrics: results.complexity,
+        security_issues: results.security,
+        style_issues: results.style,
+        documentation_issues: results.documentation,
+      });
 
-  if (error && error.code !== "PGRST116") throw error;
-  return data;
+    if (analysisError) throw analysisError;
+
+    // Save project metrics
+    const { error: metricsError } = await supabase
+      .from("project_metrics")
+      .insert({
+        project_id: projectId,
+        code_tree: results.codeTree,
+        dependency_graph: results.dependencyGraph,
+        performance_metrics: results.performance,
+      });
+
+    if (metricsError) throw metricsError;
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error saving analysis results:", error);
+    throw error;
+  }
 };
 
-export const subscribeToProjectMetrics = (
+export const subscribeToProjectUpdates = (
   projectId: string,
-  callback: (metrics: ProjectMetrics) => void,
+  onAnalysisUpdate: (data: any) => void,
+  onMetricsUpdate: (data: any) => void,
 ) => {
-  return supabase
-    .channel(`project_metrics:${projectId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "project_metrics",
-        filter: `project_id=eq.${projectId}`,
-      },
-      (payload) => {
-        if (payload.eventType === "DELETE") return;
-        callback(payload.new as ProjectMetrics);
-      },
-    )
-    .subscribe((status) => {
-      console.log(`Project metrics subscription status: ${status}`);
-    });
-};
-
-export const subscribeToAnalysisResults = (
-  projectId: string,
-  callback: (results: AnalysisResult) => void,
-) => {
-  return supabase
+  // Subscribe to analysis_results changes
+  const analysisChannel = supabase
     .channel(`analysis_results:${projectId}`)
     .on(
       "postgres_changes",
       {
-        event: "*",
+        event: "INSERT",
         schema: "public",
         table: "analysis_results",
         filter: `project_id=eq.${projectId}`,
       },
-      (payload) => {
-        if (payload.eventType === "DELETE") return;
-        callback(payload.new as AnalysisResult);
-      },
+      (payload) => onAnalysisUpdate(payload.new),
     )
-    .subscribe((status) => {
-      console.log(`Analysis results subscription status: ${status}`);
-    });
-};
+    .subscribe();
 
-export const updateProjectMetrics = async (
-  projectId: string,
-  metrics: Partial<ProjectMetrics>,
-) => {
-  const { error } = await supabase.from("project_metrics").upsert({
-    project_id: projectId,
-    ...metrics,
-    updated_at: new Date().toISOString(),
-  });
+  // Subscribe to project_metrics changes
+  const metricsChannel = supabase
+    .channel(`project_metrics:${projectId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "project_metrics",
+        filter: `project_id=eq.${projectId}`,
+      },
+      (payload) => onMetricsUpdate(payload.new),
+    )
+    .subscribe();
 
-  if (error) throw error;
-};
-
-export const saveAnalysisResults = async (
-  userId: string,
-  results: Partial<AnalysisResult>,
-) => {
-  const project = await createDefaultProject(userId);
-
-  const { error } = await supabase.from("analysis_results").insert({
-    project_id: project.id,
-    ...results,
-  });
-
-  if (error) throw error;
-
-  // Also update project metrics
-  await updateProjectMetrics(project.id, {
-    code_tree: [],
-    dependency_graph: [],
-    performance_metrics: {},
-  });
+  // Return cleanup function
+  return () => {
+    supabase.removeChannel(analysisChannel);
+    supabase.removeChannel(metricsChannel);
+  };
 };

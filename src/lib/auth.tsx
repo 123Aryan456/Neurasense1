@@ -7,22 +7,25 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, metadata?: any) => Promise<any>;
+  signIn: (
+    email: string,
+    password: string,
+  ) => Promise<{ session: Session | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    metadata?: any,
+  ) => Promise<{ user: User | null; session: Session | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updatePassword: (newPassword: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   loading: true,
-  signIn: async () => {},
-  signUp: async () => {},
+  signIn: async () => ({ session: null }),
+  signUp: async () => ({ user: null, session: null }),
   signOut: async () => {},
-  resetPassword: async () => {},
-  updatePassword: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -31,34 +34,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
-      } catch (error) {
-        console.error("Error getting session:", error);
-        toast({
-          title: "Authentication Error",
-          description:
-            "There was a problem with your session. Please sign in again.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setSession(session);
+      setUser(session?.user ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -66,14 +52,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+
+      if (!data.session) throw new Error("No session returned from sign in");
       if (error) throw error;
+
+      setSession(data.session);
+      setUser(data.user);
+
+      return { session: data.session };
     } catch (error: any) {
       console.error("Sign in error:", error);
-      throw new Error(error.message || "Failed to sign in");
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign in",
+        variant: "destructive",
+      });
+      throw error;
     }
   };
 
@@ -89,26 +87,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) throw error;
-      if (!data?.user) throw new Error("No user returned from signup");
 
-      // Create user profile
-      const { error: profileError } = await supabase.from("users").insert({
-        auth_id: data.user.id,
-        email: data.user.email,
-        name: metadata?.name || data.user.email?.split("@")[0] || "",
-        preferences: metadata?.preferences || {},
-      });
-
-      if (profileError) throw profileError;
-
-      toast({
-        title: "Account Created",
-        description: "Please check your email to verify your account.",
-      });
-
-      return data;
+      return { user: data.user, session: data.session };
     } catch (error: any) {
-      console.error("Signup error:", error);
+      console.error("Sign up error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      });
       throw error;
     }
   };
@@ -117,40 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-    } catch (error) {
+
+      setSession(null);
+      setUser(null);
+    } catch (error: any) {
       console.error("Sign out error:", error);
-      throw error;
-    }
-  };
-
-  const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
-      });
-      if (error) throw error;
       toast({
-        title: "Password Reset Email Sent",
-        description: "Please check your email for password reset instructions.",
+        title: "Error",
+        description: error.message || "Failed to sign out",
+        variant: "destructive",
       });
-    } catch (error: any) {
-      console.error("Password reset error:", error);
-      throw error;
-    }
-  };
-
-  const updatePassword = async (newPassword: string) => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw error;
-      toast({
-        title: "Password Updated",
-        description: "Your password has been successfully updated.",
-      });
-    } catch (error: any) {
-      console.error("Password update error:", error);
       throw error;
     }
   };
@@ -164,8 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signUp,
         signOut,
-        resetPassword,
-        updatePassword,
       }}
     >
       {children}

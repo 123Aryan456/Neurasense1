@@ -10,22 +10,25 @@ import { z } from "zod";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { motion, AnimatePresence } from "framer-motion";
 
-const signInSchema = z.object({
+const signUpSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-const SignInPage = () => {
+const SignUpPage = () => {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { signUp } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validateForm = () => {
     try {
-      signInSchema.parse({ email, password });
+      signUpSchema.parse({ name, email, password });
       setErrors({});
       return true;
     } catch (error) {
@@ -42,18 +45,32 @@ const SignInPage = () => {
     }
   };
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading || !validateForm()) return;
 
+    setError(null);
     setIsLoading(true);
     try {
-      const { session } = await signIn(email, password);
-      navigate("/dashboard");
+      const { user, session } = await signUp(email, password, { name });
+
+      if (!user) throw new Error("No user returned from signup");
+
+      toast({
+        title: "Success",
+        description: "Please check your email to confirm your account",
+        duration: 5000,
+      });
+
+      setTimeout(() => navigate("/signin"), 2000);
     } catch (error: any) {
-      console.error("Sign in error:", error);
-      setErrors({
-        submit: error.message || "Invalid email or password",
+      console.error("Sign up error:", error);
+      setError(error.message || "Failed to create account");
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsLoading(false);
@@ -76,18 +93,48 @@ const SignInPage = () => {
             className="space-y-2 text-center"
           >
             <h1 className="text-2xl font-semibold tracking-tight">
-              Welcome back
+              Create an account
             </h1>
             <p className="text-sm text-muted-foreground">
-              Sign in to your account to continue
+              Enter your details to create your account
             </p>
           </motion.div>
 
-          <form onSubmit={handleSignIn} className="space-y-4">
+          <form onSubmit={handleSignUp} className="space-y-4">
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
+              className="space-y-2"
+            >
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={errors.name ? "border-destructive" : ""}
+                disabled={isLoading}
+                required
+              />
+              <AnimatePresence mode="wait">
+                {errors.name && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-sm text-destructive"
+                  >
+                    {errors.name}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
               className="space-y-2"
             >
               <Label htmlFor="email">Email</Label>
@@ -99,6 +146,7 @@ const SignInPage = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 className={errors.email ? "border-destructive" : ""}
                 disabled={isLoading}
+                required
               />
               <AnimatePresence mode="wait">
                 {errors.email && (
@@ -117,7 +165,7 @@ const SignInPage = () => {
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.5 }}
               className="space-y-2"
             >
               <Label htmlFor="password">Password</Label>
@@ -128,6 +176,7 @@ const SignInPage = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 className={errors.password ? "border-destructive" : ""}
                 disabled={isLoading}
+                required
               />
               <AnimatePresence mode="wait">
                 {errors.password && (
@@ -144,14 +193,14 @@ const SignInPage = () => {
             </motion.div>
 
             <AnimatePresence mode="wait">
-              {errors.submit && (
+              {error && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   className="p-3 text-sm text-destructive bg-destructive/10 rounded-md"
                 >
-                  {errors.submit}
+                  {error}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -159,10 +208,10 @@ const SignInPage = () => {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.6 }}
             >
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner /> : "Sign In"}
+                {isLoading ? <LoadingSpinner /> : "Create Account"}
               </Button>
             </motion.div>
           </form>
@@ -170,19 +219,19 @@ const SignInPage = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.7 }}
             className="text-center text-sm"
           >
             <span className="text-muted-foreground">
-              Don't have an account?{" "}
+              Already have an account?{" "}
             </span>
             <Button
               variant="link"
               className="p-0 h-auto font-normal"
-              onClick={() => navigate("/signup")}
+              onClick={() => navigate("/signin")}
               disabled={isLoading}
             >
-              Sign up
+              Sign in
             </Button>
           </motion.div>
         </CardContent>
@@ -191,4 +240,4 @@ const SignInPage = () => {
   );
 };
 
-export default SignInPage;
+export default SignUpPage;

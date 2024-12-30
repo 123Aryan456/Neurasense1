@@ -9,6 +9,7 @@ import ComplexityWidget from "./widgets/ComplexityWidget";
 import DependencyWidget from "./widgets/DependencyWidget";
 import PerformanceWidget from "./widgets/PerformanceWidget";
 import { useDashboard } from "@/lib/dashboardContext";
+import { motion } from "framer-motion";
 
 const GridLayout = () => {
   const { activeSection, analysisResults } = useDashboard();
@@ -16,46 +17,70 @@ const GridLayout = () => {
   const hasAnalysis = !!analysisResults;
 
   const NoDataMessage = () => (
-    <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2"
+    >
       <p>No analysis data available</p>
       <p className="text-sm">Run an analysis to see metrics</p>
-    </div>
+    </motion.div>
   );
 
   return (
     <div className="h-full w-full p-6">
       <ResizablePanelGroup
         direction="horizontal"
-        className="min-h-[800px] rounded-lg border border-border"
+        className="min-h-[800px] rounded-lg border border-border bg-card/50 backdrop-blur-sm"
       >
         <ResizablePanel defaultSize={50} minSize={30}>
           <ResizablePanelGroup direction="vertical">
             <ResizablePanel defaultSize={50} minSize={35}>
-              <div className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]"
+              >
                 {hasAnalysis ? <CodeTreeWidget /> : <NoDataMessage />}
-              </div>
+              </motion.div>
             </ResizablePanel>
-            <ResizableHandle />
+            <ResizableHandle className="bg-border/50 hover:bg-border transition-colors" />
             <ResizablePanel defaultSize={50} minSize={35}>
-              <div className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]"
+              >
                 {hasAnalysis ? <ComplexityWidget /> : <NoDataMessage />}
-              </div>
+              </motion.div>
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
-        <ResizableHandle />
+        <ResizableHandle className="bg-border/50 hover:bg-border transition-colors" />
         <ResizablePanel defaultSize={50} minSize={30}>
           <ResizablePanelGroup direction="vertical">
             <ResizablePanel defaultSize={50} minSize={35}>
-              <div className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]"
+              >
                 {hasAnalysis ? <DependencyWidget /> : <NoDataMessage />}
-              </div>
+              </motion.div>
             </ResizablePanel>
-            <ResizableHandle />
+            <ResizableHandle className="bg-border/50 hover:bg-border transition-colors" />
             <ResizablePanel defaultSize={50} minSize={35}>
-              <div className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="flex items-center justify-center p-6 overflow-auto min-w-[350px] min-h-[300px]"
+              >
                 {hasAnalysis ? <PerformanceWidget /> : <NoDataMessage />}
-              </div>
+              </motion.div>
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>

@@ -1,18 +1,13 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import type { TreeNode } from "@/components/dashboard/widgets/CodeTreeWidget";
 import { useAuth } from "./auth";
 import {
-  getProjectMetrics,
-  getAnalysisResults,
-  subscribeToProjectMetrics,
-  subscribeToAnalysisResults,
+  getCurrentProject,
+  subscribeToProjectUpdates,
+  createProject,
 } from "./projectService";
+import { supabase } from "./supabase";
+import { toast } from "@/components/ui/use-toast";
 
 interface WidgetSettings {
   showLineNumbers: boolean;
@@ -51,7 +46,9 @@ interface DashboardContextType {
   };
   loadingStates: LoadingState;
   metrics: any;
+  setMetrics: (metrics: any) => void;
   analysisResults: any;
+  setAnalysisResults: (results: any) => void;
   updateWidgetSettings: (
     widget: keyof DashboardContextType["widgetSettings"],
     settings: Partial<
@@ -95,83 +92,95 @@ const DashboardContext = createContext<DashboardContextType | null>(null);
 export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user } = useAuth();
+  const { session } = useAuth();
   const [activeSection, setActiveSection] = useState("home");
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [widgetSettings, setWidgetSettings] = useState(defaultSettings);
   const [metrics, setMetrics] = useState(null);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [loadingStates, setLoadingStates] = useState<LoadingState>({
-    codeTree: true,
-    complexity: true,
-    dependency: true,
-    performance: true,
+    codeTree: false,
+    complexity: false,
+    dependency: false,
+    performance: false,
   });
 
-  const mounted = useRef(true);
-
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+    if (!session?.user?.id) return;
 
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const loadData = async () => {
+    const initializeDashboard = async () => {
       try {
-        const [metricsData, analysisData] = await Promise.all([
-          getProjectMetrics(user.id),
-          getAnalysisResults(user.id),
-        ]);
+        let project = await getCurrentProject();
 
-        if (mounted.current) {
-          setMetrics(metricsData);
-          setAnalysisResults(analysisData);
-        }
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
-      } finally {
-        if (mounted.current) {
-          setLoadingStates({
-            codeTree: false,
-            complexity: false,
-            dependency: false,
-            performance: false,
+        // If no project exists, create one
+        if (!project) {
+          project = await createProject({
+            name: "My Project",
+            type: "python",
+            settings: {
+              theme: "dark",
+              notifications: true,
+            },
           });
         }
+
+        // Get latest analysis results
+        const { data: latestAnalysis } = await supabase
+          .from("analysis_results")
+          .select("*")
+          .eq("project_id", project.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (latestAnalysis) {
+          setAnalysisResults(latestAnalysis);
+        }
+
+        // Get latest metrics
+        const { data: latestMetrics } = await supabase
+          .from("project_metrics")
+          .select("*")
+          .eq("project_id", project.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (latestMetrics) {
+          setMetrics(latestMetrics);
+        }
+
+        const cleanup = subscribeToProjectUpdates(
+          project.id,
+          (analysisData) => {
+            setAnalysisResults(analysisData);
+            toast({
+              title: "Analysis Updated",
+              description: "New analysis results available",
+            });
+          },
+          (metricsData) => {
+            setMetrics(metricsData);
+            toast({
+              title: "Metrics Updated",
+              description: "Project metrics have been updated",
+            });
+          },
+        );
+
+        return cleanup;
+      } catch (error) {
+        console.error("Error initializing dashboard:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive",
+        });
       }
     };
 
-    loadData();
-
-    // Subscribe to real-time updates
-    const metricsSubscription = subscribeToProjectMetrics(
-      user.id,
-      (newMetrics) => {
-        if (mounted.current) {
-          setMetrics(newMetrics);
-        }
-      },
-    );
-
-    const analysisSubscription = subscribeToAnalysisResults(
-      user.id,
-      (newResults) => {
-        if (mounted.current) {
-          setAnalysisResults(newResults);
-        }
-      },
-    );
-
-    return () => {
-      metricsSubscription.unsubscribe();
-      analysisSubscription.unsubscribe();
-      mounted.current = false;
-    };
-  }, [user?.id]);
+    initializeDashboard();
+  }, [session?.user?.id]);
 
   const updateWidgetSettings = (
     widget: keyof typeof widgetSettings,
@@ -191,7 +200,9 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({
     widgetSettings,
     loadingStates,
     metrics,
+    setMetrics,
     analysisResults,
+    setAnalysisResults,
     updateWidgetSettings,
   };
 
